@@ -6,30 +6,34 @@ from langchain_community.chat_models import ChatPerplexity
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate
-import os
 
-load_dotenv()
-api_key = os.environ["PPLX_API_KEY"]
 
-url = "https://www.youtube.com/watch?v=TwDJhUJL-5o"
-loader = YoutubeLoader.from_youtube_url(
-    url, add_video_info=False
-)
-docs = loader.load()
+def get_youtube_transcript(url):
+    loader = YoutubeLoader.from_youtube_url(
+        url, add_video_info=False
+    )
+    docs = loader.load()
+    return docs
 
-# Define prompt
-prompt_template = """Write a summary of the following video transcript. Highlight key points of the video and include the timestamp in (mm:ss) format.
-"{text}"
-VIDEO SUMMARY:"""
-prompt = PromptTemplate.from_template(prompt_template)
+def get_prompt():
+    prompt_template = """Write a summary of the video transcript delimited in <>. Proceed section by section of the video, one paragraph for each section. State the key points of the section (include the timestamp in (mm:ss) format). 
+    <{text}>
+    VIDEO SUMMARY:"""
+    prompt = PromptTemplate.from_template(prompt_template)
+    return prompt
 
-# Define LLM chain
-llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-1106")
-# llm = ChatPerplexity(temperature=0, pplx_api_key="Bearer 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", model="pplx-70b-online")
-llm_chain = LLMChain(llm=llm, prompt=prompt)
 
-# Define StuffDocumentsChain
-stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
+def get_summary_chain(model="mixtral-8x7b-instruct"):
+    llm = ChatPerplexity(temperature=0, model=model)
+    llm_chain = LLMChain(llm=llm, prompt=get_prompt())
+    # Use StuffDocumentsChain
+    stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
+    return stuff_chain
 
-docs = loader.load()
-print(stuff_chain.invoke(docs))
+if __name__ == '__main__':
+    load_dotenv()
+    url = "https://www.youtube.com/watch?v=TwDJhUJL-5o"
+    docs = get_youtube_transcript(url)
+    summary_chain = get_summary_chain("mixtral-8x7b-instruct")
+    response = summary_chain.invoke(docs)
+    print(response['output_text'])
