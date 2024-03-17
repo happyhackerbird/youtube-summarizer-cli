@@ -1,3 +1,4 @@
+import openai
 from langchain_community.document_loaders import YoutubeLoader
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatPerplexity
@@ -5,14 +6,13 @@ from langchain_community.chat_models import ChatPerplexity
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.llm import LLMChain
 from langchain.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain.memory import ChatMessageHistory
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
 import os
 import typer
 from typing import Optional
 from prompt_toolkit import prompt
-from prompt_toolkit.history import InMemoryHistory
-from langchain.memory import ChatMessageHistory
-from langchain.chains.combine_documents import create_stuff_documents_chain
 
 
 def get_youtube_transcript(url):
@@ -55,7 +55,7 @@ def get_summary_chain(llm):
     stuff_chain = StuffDocumentsChain(llm_chain=llm_chain, document_variable_name="text")
     return stuff_chain
 
-app = typer.Typer()
+app = typer.Typer(add_completion=False)
 
 @app.command()
 def main(model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model to use"),
@@ -63,7 +63,7 @@ def main(model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model 
           interactive: bool = typer.Option(False, "--interactive", "-i", help="If true enter interactive mode"),
           url: str = typer.Argument(help="The URL of the video to summarize")):
     """
-    This is a YouTube Summarizer and Q&A CLI using Perplexity AI and ChatGPT-4. Supply your API key and the desired model to start summarizing & asking questions about the video in an interactive prompt. Type "quit" to exit the Q&A.
+    This is a YouTube Summarizer and Q&A CLI using Perplexity AI and ChatGPT-4. Supply your API key and the desired model (or set them as ${OPENAI_API_KEY} and ${PPLX_API_KEY}) to start summarizing and asking questions about the video in an interactive prompt. Type "quit" to exit the Q&A.
 
     Note: To use GPT-4 (Turbo), use the model name "gpt-4" and supply the OpenAI API key.
     """
@@ -74,20 +74,38 @@ def main(model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model 
     else:
         key = key or os.getenv("PPLX_API_KEY")
     if key is None:
-        typer.echo("Error: An API key is required.", err=True)
-        raise typer.Abort()
+        typer.echo(typer.style("Error: An API key is required.", fg=typer.colors.RED, bold=True), err=True)
+        raise typer.Exit(code=1)
+
     
     # get youtube transcript 
-    docs = get_youtube_transcript(url)
+    try: 
+        docs = get_youtube_transcript(url)
+    except ValueError:
+        typer.echo(typer.style("Error: Invalid YouTube URL.", fg=typer.colors.RED, bold=True), err=True)
+        raise typer.Exit(code=1)
+
     # get the llm 
     llm = get_llm(model, key)
     # summarize & print result
-    response = get_summary_chain(llm).invoke(docs)
-    typer.echo(response['output_text'])
+    try:
+        response = get_summary_chain(llm).invoke(docs)
+        typer.echo(response['output_text'])
+    except openai.AuthenticationError:
+        typer.echo(typer.style(f"Error: Invalid API key.", fg=typer.colors.RED, bold=True), err=True)
+        raise typer.Exit(code=1)
+    except openai.BadRequestError as e:
+        typer.echo(typer.style(f'There was an error querying the LLM: {e.message}', fg=typer.colors.RED, bold=True), err=True)
+        raise typer.Exit(code=1)
+    except:
+        typer.echo(typer.style(f"An error occurred.", fg=typer.colors.RED, bold=True), err=True)
+        raise typer.Exit(code=1)
+
 
     if not interactive:
         return
-    
+    import validators
+    from urllib.parse import urlparse
     #Enter interactive chat session if indicated
     chat = create_stuff_documents_chain(llm, get_qa_prompt())
     history = ChatMessageHistory()
@@ -95,6 +113,11 @@ def main(model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model 
         user_input = prompt("\n>> ")
         if user_input.lower() == "quit" or user_input.lower() == "exit":
             break
+        elif user_input == "":
+            continue
+        elif validators.url(user_input): #if user enters another url
+            pass
+        
         history.add_user_message(user_input)
         response = chat.invoke({
             "messages": history.messages,
