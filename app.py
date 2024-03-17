@@ -22,8 +22,12 @@ def get_youtube_transcript(url):
     return docs
 
 
-def get_summary_prompt():
-    prompt_template = """Write a summary of the video transcript delimited in <>. Proceed section by section of the video, one paragraph for each section. State the key points of the section (include the timestamp in (mm:ss) format). 
+def get_summary_prompt(short):
+    if short:
+        prompt_template = """Write a concise summary of the following, highlighting the key points.
+            <{text}>"""
+    else:
+        prompt_template = """Write a summary of the video transcript delimited in <>. Proceed section by section of the video, one paragraph for each section. State the key points of the section (include the timestamp in (mm:ss) format). 
     <{text}>
     VIDEO SUMMARY:"""
     prompt = PromptTemplate.from_template(prompt_template)
@@ -44,15 +48,15 @@ def get_qa_prompt():
 
 
 def get_llm(model, key):
-    if model == "gpt-4-turbo-preview":
+    if model[0:3] == "gpt":
         llm = ChatOpenAI(temperature=0, model=model, openai_api_key=key)
     else:
         llm = ChatPerplexity(temperature=0, model=model, pplx_api_key=key)
     return llm
 
 
-def get_summary_chain(llm):
-    llm_chain = LLMChain(llm=llm, prompt=get_summary_prompt())
+def get_summary_chain(llm, short):
+    llm_chain = LLMChain(llm=llm, prompt=get_summary_prompt(short))
     # Use StuffDocumentsChain
     stuff_chain = StuffDocumentsChain(
         llm_chain=llm_chain, document_variable_name="text"
@@ -68,18 +72,28 @@ def main(
     model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model to use"),
     key: Optional[str] = typer.Option(None, help="The API key for the LLM model"),
     interactive: bool = typer.Option(
-        False, "--interactive", "-i", help="If true enter interactive mode"
+        False, "--interactive", "-i", help="If true, enter interactive mode"
     ),
-    url: str = typer.Argument(None, help="The URL of the video to summarize"),
+    short: bool = typer.Option(
+        False, "--short", "-s", help="If true, returns a concise summary"
+    ),
+    url: str = typer.Argument(
+        None, help="The URL of the video to summarize (Optional)"
+    ),
 ):
     """
-    This is a YouTube Summarizer and Q&A CLI using Perplexity AI and ChatGPT-4. Supply your API key and the desired model (or set them as ${OPENAI_API_KEY} and ${PPLX_API_KEY}) to start summarizing and asking questions about the video in an interactive prompt. Type "quit" to exit the Q&A.
+    This is a YouTube Summarizer and Q&A CLI using Perplexity AI and ChatGPT-4. Supply your API key and the desired model or set the keys as ${OPENAI_API_KEY} and ${PPLX_API_KEY}.
+
+    Start summarizing and asking questions about the video in an interactive prompt. You can also enter a new YouTube video URL in the interactive prompt and it will return the summary and start the Q&A session for this video. Type "quit" to exit the Q&A.
 
     Note: To use GPT-4 (Turbo), use the model name "gpt-4" and supply the OpenAI API key.
     """
     # check if the key is provided, if not abort
     if model == "gpt-4":
         model = "gpt-4-turbo-preview"
+        key = key or os.getenv("OPENAI_API_KEY")
+    elif model == "gpt-3":
+        model = "gpt-3.5-turbo"
         key = key or os.getenv("OPENAI_API_KEY")
     else:
         key = key or os.getenv("PPLX_API_KEY")
@@ -115,7 +129,7 @@ def main(
                 raise typer.Exit(code=1)
             # summarize & print result
             try:
-                response = get_summary_chain(llm).invoke(docs)
+                response = get_summary_chain(llm, short).invoke(docs)
                 typer.echo(response["output_text"])
                 typer.echo("")
             except openai.AuthenticationError:
