@@ -1,3 +1,6 @@
+#!/home/lilly/code/video-sum/bin/python3 
+
+
 import openai
 from langchain_community.document_loaders import YoutubeLoader
 from langchain_openai import ChatOpenAI
@@ -14,7 +17,7 @@ import typer
 from typing import Optional
 from prompt_toolkit import prompt
 from urllib.parse import urlparse
-
+from dotenv import load_dotenv
 
 def get_youtube_transcript(url):
     loader = YoutubeLoader.from_youtube_url(url, add_video_info=False)
@@ -89,6 +92,8 @@ def main(
     Note: To use GPT-4 (Turbo), use the model name "gpt-4" and supply the OpenAI API key.
     """
     # check if the key is provided, if not abort
+
+    load_dotenv()
     if model == "gpt-4":
         model = "gpt-4-turbo-preview"
         key = key or os.getenv("OPENAI_API_KEY")
