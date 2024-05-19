@@ -1,7 +1,8 @@
-#!/home/lilly/code/video-sum/bin/python3 
+#!/home/lilly/code/video-sum/bin/python3
 
 
 import openai
+from straico import ChatStraico
 from langchain_community.document_loaders import YoutubeLoader
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatPerplexity
@@ -54,7 +55,8 @@ def get_llm(model, key):
     if model[0:3] == "gpt":
         llm = ChatOpenAI(temperature=0, model=model, openai_api_key=key)
     else:
-        llm = ChatPerplexity(temperature=0, model=model, pplx_api_key=key)
+        # llm = ChatPerplexity(temperature=0, model=model, pplx_api_key=key)
+        llm = ChatStraico(model=model, straico_api_key=key)
     return llm
 
 
@@ -94,6 +96,7 @@ def main(
     # check if the key is provided, if not abort
 
     load_dotenv()
+    model = model or os.getenv("MODEL")
     if model == "gpt-4":
         model = "gpt-4-turbo-preview"
         key = key or os.getenv("OPENAI_API_KEY")
@@ -101,7 +104,7 @@ def main(
         model = "gpt-3.5-turbo"
         key = key or os.getenv("OPENAI_API_KEY")
     else:
-        key = key or os.getenv("PPLX_API_KEY")
+        key = key or os.getenv("STRAICO_API_KEY")
     if key is None:
         typer.echo(
             typer.style(
