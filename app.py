@@ -21,7 +21,12 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 def get_youtube_transcript(url):
-    loader = YoutubeLoader.from_youtube_url(url, add_video_info=False)
+    loader = YoutubeLoader.from_youtube_url(
+        url,
+        add_video_info=False,
+        language=["de", "en"],
+        translation="en",
+    )
     docs = loader.load()
     return docs
 
@@ -74,7 +79,7 @@ app = typer.Typer(add_completion=False)
 
 @app.command()
 def main(
-    model: str = typer.Option("mixtral-8x7b-instruct", help="The LLM model to use"),
+    model: str = typer.Option("openai/gpt-4o", help="The LLM model to use"),
     key: Optional[str] = typer.Option(None, help="The API key for the LLM model"),
     interactive: bool = typer.Option(
         False, "--interactive", "-i", help="If true, enter interactive mode"
@@ -97,6 +102,7 @@ def main(
 
     load_dotenv()
     model = model or os.getenv("MODEL")
+    print(model)
     if model == "gpt-4":
         model = "gpt-4-turbo-preview"
         key = key or os.getenv("OPENAI_API_KEY")
@@ -105,6 +111,7 @@ def main(
         key = key or os.getenv("OPENAI_API_KEY")
     else:
         key = key or os.getenv("STRAICO_API_KEY")
+
     if key is None:
         typer.echo(
             typer.style(
@@ -123,9 +130,9 @@ def main(
     while True:
         if url:
             empty_url = False
-            typer.echo("Summarizing...")
             # get youtube transcript
             try:
+                typer.echo(f"Getting transcript for {url}")
                 docs = get_youtube_transcript(url)
             except ValueError:
                 typer.echo(
@@ -137,6 +144,7 @@ def main(
                 raise typer.Exit(code=1)
             # summarize & print result
             try:
+                typer.echo("Summarizing...")
                 response = get_summary_chain(llm, short).invoke(docs)
                 typer.echo(response["output_text"])
                 typer.echo("")
@@ -158,9 +166,11 @@ def main(
                     err=True,
                 )
                 raise typer.Exit(code=1)
-            except:
+            except Exception as e:
                 typer.echo(
-                    typer.style(f"An error occurred.", fg=typer.colors.RED, bold=True),
+                    typer.style(
+                        f"An error occurred: {e}", fg=typer.colors.RED, bold=True
+                    ),
                     err=True,
                 )
                 raise typer.Exit(code=1)
