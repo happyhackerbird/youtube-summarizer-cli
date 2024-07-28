@@ -79,7 +79,9 @@ app = typer.Typer(add_completion=False)
 
 @app.command()
 def main(
-    model: str = typer.Option("openai/gpt-4o", help="The LLM model to use"),
+    model: str = typer.Option(
+        "meta-llama/llama-3.1-405b-instruct", help="The LLM model to use"
+    ),
     key: Optional[str] = typer.Option(None, help="The API key for the LLM model"),
     interactive: bool = typer.Option(
         False, "--interactive", "-i", help="If true, enter interactive mode"
